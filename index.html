@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Suffix Tree — Búsqueda y Detección de Plagio</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌳</text></svg>" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Suffix Tree — Buscador Indexado de Documentos</h1>
+    <nav>
+      <button class="tab-btn active" data-tab="search">Ctrl+F</button>
+      <button class="tab-btn" data-tab="plagiarism">Plagio</button>
+      <button class="tab-btn" data-tab="benchmark">Benchmark</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ── Tab: Search ── -->
+    <section id="tab-search" class="tab-content active">
+      <div class="card">
+        <h2>Documento</h2>
+        <div class="row">
+          <input type="file" id="doc-file-input" accept=".pdf,.txt" />
+          <button id="doc-upload-btn">Subir</button>
+          <button id="doc-load-btn" class="secondary">Cargar en árbol</button>
+        </div>
+        <div id="doc-info" class="info-box hidden"></div>
+        <div id="doc-build-stats" class="stats hidden">
+          <span id="doc-filename-label"></span>
+          <span id="doc-chars-label"></span>
+          <span id="doc-build-time-label"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Búsqueda</h2>
+        <div class="row">
+          <input type="text" id="search-input" placeholder="Escribe un patrón..." />
+          <button id="search-btn">Buscar</button>
+        </div>
+        <div id="search-results" class="hidden">
+          <div class="stats">
+            <span id="search-count-label"></span>
+            <span id="search-time-label"></span>
+            <span id="search-positions-label"></span>
+          </div>
+          <div id="tree-path-box" class="tree-path hidden">
+            <strong>Ruta en el árbol:</strong>
+            <code id="tree-path-content"></code>
+          </div>
+          <div id="text-display" class="text-display"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Tab: Plagiarism ── -->
+    <section id="tab-plagiarism" class="tab-content">
+      <div class="card">
+        <h2>Corpus de Referencia</h2>
+        <div class="row">
+          <input type="file" id="corpus-file-input" accept=".pdf,.txt" multiple />
+          <button id="corpus-upload-btn">Subir</button>
+          <button id="corpus-build-btn" class="secondary">Construir árbol</button>
+        </div>
+        <div id="corpus-info" class="info-box hidden"></div>
+        <div id="corpus-stats" class="stats hidden">
+          <span id="corpus-sources-label"></span>
+          <span id="corpus-chars-label"></span>
+          <span id="corpus-build-time-label"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Detección de Plagio</h2>
+        <div class="row">
+          <label class="compact">Longitud mínima:</label>
+          <input type="number" id="min-match-length" value="40" min="5" max="200" />
+          <button id="detect-btn">Detectar</button>
+        </div>
+        <div id="detect-results" class="hidden">
+          <div class="stats">
+            <span id="detect-global-pct"></span>
+          </div>
+          <div id="detect-by-source" class="by-source hidden"></div>
+          <div id="detect-spans" class="text-display"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Tab: Benchmark ── -->
+    <section id="tab-benchmark" class="tab-content">
+      <div class="card">
+        <h2>Benchmark</h2>
+        <div class="row">
+          <label class="compact">Patrón:</label>
+          <input type="text" id="benchmark-pattern" value="the" />
+          <button id="benchmark-btn">Ejecutar</button>
+        </div>
+        <div id="benchmark-results" class="hidden">
+          <table id="benchmark-table">
+            <thead>
+              <tr>
+                <th>Tamaño</th>
+                <th>Archivo</th>
+                <th>Construcción (ms)</th>
+                <th>Búsqueda ST (ms)</th>
+                <th>Búsqueda Naive (ms)</th>
+                <th>Aceleración</th>
+                <th>Ocurrencias</th>
+              </tr>
+            </thead>
+            <tbody id="benchmark-tbody"></tbody>
+          </table>
+          <div id="benchmark-chart" class="chart-container"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Proyecto 2 — CS2023 Algoritmos y Estructuras de Datos | Suffix Tree con Ukkonen</p>
+  </footer>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
