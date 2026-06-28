@@ -9,91 +9,129 @@
 </head>
 <body>
   <header>
-    <h1>Suffix Tree — Buscador Indexado de Documentos</h1>
+    <h1>Buscador Indexado de Documentos y Detector de Plagio</h1>
     <nav>
-      <button class="tab-btn active" data-tab="search">Ctrl+F</button>
-      <button class="tab-btn" data-tab="plagiarism">Plagio</button>
+      <button class="tab-btn active" data-tab="document">Documento</button>
       <button class="tab-btn" data-tab="benchmark">Benchmark</button>
     </nav>
   </header>
 
   <main>
-    <!-- ── Tab: Search ── -->
-    <section id="tab-search" class="tab-content active">
-      <div class="card">
-        <h2>Documento</h2>
-        <div class="row">
-          <input type="file" id="doc-file-input" accept=".pdf,.txt" />
-          <button id="doc-upload-btn">Subir</button>
-          <button id="doc-load-btn" class="secondary">Cargar en árbol</button>
-        </div>
-        <div id="doc-info" class="info-box hidden"></div>
-        <div id="doc-build-stats" class="stats hidden">
-          <span id="doc-filename-label"></span>
-          <span id="doc-chars-label"></span>
-          <span id="doc-build-time-label"></span>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Búsqueda</h2>
-        <div class="row">
-          <input type="text" id="search-input" placeholder="Escribe un patrón..." />
-          <button id="search-btn">Buscar</button>
-        </div>
-        <div id="search-results" class="hidden">
-          <div class="stats">
-            <span id="search-count-label"></span>
-            <span id="search-time-label"></span>
-            <span id="search-positions-label"></span>
+    <!-- ── Tab: Document (Ctrl+F + Plagiarism) ── -->
+    <section id="tab-document" class="tab-content active">
+      <div class="search-layout">
+        <!-- Left: document text (shared by search highlights & plagiarism spans) -->
+        <div class="text-panel">
+          <div id="view-mode" class="view-mode hidden">
+            <span id="view-mode-label"></span>
           </div>
-          <div id="tree-path-box" class="tree-path hidden">
-            <strong>Ruta en el árbol:</strong>
-            <code id="tree-path-content"></code>
-          </div>
-          <div id="text-display" class="text-display"></div>
+          <div id="text-display" class="text-display">(carga un documento para empezar)</div>
         </div>
-      </div>
-    </section>
 
-    <!-- ── Tab: Plagiarism ── -->
-    <section id="tab-plagiarism" class="tab-content">
-      <div class="card">
-        <h2>Corpus de Referencia</h2>
-        <div class="row">
-          <input type="file" id="corpus-file-input" accept=".pdf,.txt" multiple />
-          <button id="corpus-upload-btn">Subir</button>
-          <button id="corpus-build-btn" class="secondary">Construir árbol</button>
-        </div>
-        <div id="corpus-info" class="info-box hidden"></div>
-        <div id="corpus-stats" class="stats hidden">
-          <span id="corpus-sources-label"></span>
-          <span id="corpus-chars-label"></span>
-          <span id="corpus-build-time-label"></span>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Detección de Plagio</h2>
-        <div class="row">
-          <label class="compact">Longitud mínima:</label>
-          <input type="number" id="min-match-length" value="40" min="5" max="200" />
-          <button id="detect-btn">Detectar</button>
-        </div>
-        <div id="detect-results" class="hidden">
-          <div class="stats">
-            <span id="detect-global-pct"></span>
+        <!-- Right: controls -->
+        <aside class="controls-panel">
+          <!-- Step 1: the document to analyze -->
+          <div class="card">
+            <h2>1 · Documento a analizar</h2>
+            <p class="card-hint">El documento que quieres revisar. Se usa tanto para buscar (Ctrl+F) como para detectar plagio.</p>
+            <div class="field">
+              <input type="file" id="doc-file-input" accept=".pdf,.txt" />
+              <div class="btn-row">
+                <button id="doc-upload-btn">Subir</button>
+                <button id="doc-load-btn" class="secondary">Cargar en árbol</button>
+              </div>
+            </div>
+            <div id="doc-info" class="info-box hidden"></div>
+            <div id="doc-build-stats" class="stats hidden">
+              <span id="doc-filename-label"></span>
+              <span id="doc-chars-label"></span>
+              <span id="doc-build-time-label"></span>
+            </div>
           </div>
-          <div id="detect-by-source" class="by-source hidden"></div>
-          <div id="detect-spans" class="text-display"></div>
-        </div>
+
+          <!-- Ctrl+F search within the document -->
+          <div class="card">
+            <h2>Buscar (Ctrl+F)</h2>
+            <p class="card-hint">Busca un patrón dentro del documento cargado.</p>
+            <div class="row">
+              <input type="text" id="search-input" placeholder="Escribe un patrón..." />
+              <button id="search-btn">Buscar</button>
+            </div>
+            <div id="search-results" class="hidden">
+              <div class="stats">
+                <span id="search-count-label"></span>
+                <span id="search-time-label"></span>
+              </div>
+              <div id="occ-nav" class="occ-nav hidden">
+                <button id="occ-prev" class="nav-btn secondary" title="Anterior">◀</button>
+                <span id="occ-position">—</span>
+                <button id="occ-next" class="nav-btn secondary" title="Siguiente">▶</button>
+              </div>
+              <div id="search-positions-label" class="positions"></div>
+              <div id="tree-path-box" class="tree-path hidden">
+                <strong>Ruta en el árbol:</strong>
+                <code id="tree-path-content"></code>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: reference corpus -->
+          <div class="card">
+            <h2>2 · Corpus de referencia</h2>
+            <p class="card-hint">Los documentos originales contra los que se compara para detectar plagio.</p>
+            <div class="field">
+              <input type="file" id="corpus-file-input" accept=".pdf,.txt" multiple />
+              <div class="btn-row">
+                <button id="corpus-upload-btn">Subir</button>
+                <button id="corpus-build-btn" class="secondary">Construir árbol</button>
+              </div>
+            </div>
+            <div id="corpus-info" class="info-box hidden"></div>
+            <div id="corpus-stats" class="stats hidden">
+              <span id="corpus-sources-label"></span>
+              <span id="corpus-chars-label"></span>
+              <span id="corpus-build-time-label"></span>
+            </div>
+          </div>
+
+          <!-- Detect plagiarism: document vs corpus -->
+          <div class="card">
+            <h2>Detectar plagio</h2>
+            <p class="card-hint">Requiere el documento (paso 1) y el corpus (paso 2) cargados.</p>
+            <div class="row">
+              <label class="compact">Longitud mínima:</label>
+              <input type="number" id="min-match-length" value="40" min="5" max="200" />
+              <button id="detect-btn">Detectar</button>
+            </div>
+            <div id="detect-results" class="hidden">
+              <div class="stats">
+                <span id="detect-global-pct"></span>
+              </div>
+              <div id="detect-by-source" class="by-source hidden"></div>
+            </div>
+          </div>
+        </aside>
       </div>
     </section>
 
     <!-- ── Tab: Benchmark ── -->
     <section id="tab-benchmark" class="tab-content">
       <div class="card">
-        <h2>Benchmark</h2>
+        <h2>Archivos de benchmark</h2>
+        <p class="card-hint">Sube PDFs o TXTs para usar como corpus de prueba. Se convierten a texto plano y quedan disponibles para el benchmark.</p>
+        <div class="field">
+          <input type="file" id="benchmark-file-input" accept=".pdf,.txt" multiple />
+          <div class="btn-row">
+            <button id="benchmark-upload-btn">Subir</button>
+          </div>
+        </div>
+        <div id="benchmark-upload-info" class="info-box hidden"></div>
+        <div id="benchmark-upload-stats" class="hidden"></div>
+      </div>
+
+      <div class="card">
+        <h2>Ejecutar benchmark</h2>
+        <p class="card-hint">Construye un suffix tree por cada archivo y mide la velocidad de búsqueda vs. búsqueda naive.</p>
         <div class="row">
           <label class="compact">Patrón:</label>
           <input type="text" id="benchmark-pattern" value="the" />
@@ -103,8 +141,9 @@
           <table id="benchmark-table">
             <thead>
               <tr>
-                <th>Tamaño</th>
                 <th>Archivo</th>
+                <th>Caracteres</th>
+                <th>Palabras</th>
                 <th>Construcción (ms)</th>
                 <th>Búsqueda ST (ms)</th>
                 <th>Búsqueda Naive (ms)</th>
@@ -114,14 +153,17 @@
             </thead>
             <tbody id="benchmark-tbody"></tbody>
           </table>
-          <div id="benchmark-chart" class="chart-container"></div>
+          <div class="charts-row">
+            <div class="chart-container"><canvas id="chart-build"></canvas></div>
+            <div class="chart-container"><canvas id="chart-search"></canvas></div>
+          </div>
         </div>
       </div>
     </section>
   </main>
 
   <footer>
-    <p>Proyecto 2 — CS2023 Algoritmos y Estructuras de Datos | Suffix Tree con Ukkonen</p>
+    <p>CS2023 Algoritmos y Estructuras de Datos</p>
   </footer>
 
   <script type="module" src="/src/main.js"></script>

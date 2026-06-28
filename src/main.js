@@ -1,3 +1,6 @@
+import { Chart, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
+Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+
 const API_BASE = '';
 
 // ── Tab switching ─────────────────────────────────────────────────────────────
@@ -28,6 +31,30 @@ function hideInfo(id) {
   document.getElementById(id).classList.add('hidden');
 }
 
+// Small badge above the shared text panel saying what it's currently showing.
+function setViewMode(label) {
+  const box = document.getElementById('view-mode');
+  if (!label) { box.classList.add('hidden'); return; }
+  document.getElementById('view-mode-label').textContent = label;
+  box.classList.remove('hidden');
+}
+
+const ERROR_MESSAGES = {
+  search_doc_missing: 'No hay ningún documento subido para cargar.',
+  search_doc_multiple: 'Hay más de un documento; deja solo uno.',
+  no_document: 'Primero carga un documento en el árbol.',
+  empty_pattern: 'El patrón de búsqueda está vacío.',
+  no_corpus: 'Primero construye el árbol del corpus.',
+  corpus_dir_empty: 'El corpus está vacío; sube al menos un archivo.',
+  too_many_documents: 'Demasiados documentos en el corpus (máx. 254).',
+  corpus_too_large: 'El corpus excede el tamaño máximo (2M caracteres).',
+  benchmark_file_missing: 'No se encontraron archivos de benchmark.',
+};
+
+function friendlyError(msg) {
+  return ERROR_MESSAGES[msg] || msg;
+}
+
 async function api(url, body) {
   const opts = { method: 'POST' };
   if (body instanceof FormData) {
@@ -54,7 +81,7 @@ document.getElementById('doc-upload-btn').addEventListener('click', async () => 
     const data = await api('/document/upload', fd);
     showInfo('doc-info', `"${data.filename}" subido (${data.char_count} caracteres)`, 'success');
   } catch (e) {
-    showInfo('doc-info', `Error: ${e.message}`, 'error');
+    showInfo('doc-info', `Error: ${friendlyError(e.message)}`, 'error');
   }
 });
 
@@ -69,9 +96,10 @@ document.getElementById('doc-load-btn').addEventListener('click', async () => {
     text('doc-chars-label', `Caracteres: ${data.char_count.toLocaleString()}`);
     text('doc-build-time-label', `Construcción: ${data.build_time_ms.toFixed(2)} ms`);
     window._docText = data.text_original;
+    setViewMode('');
     renderText(data.text_original);
   } catch (e) {
-    showInfo('doc-info', `Error: ${e.message}`, 'error');
+    showInfo('doc-info', `Error: ${friendlyError(e.message)}`, 'error');
   }
 });
 
@@ -80,7 +108,7 @@ document.getElementById('doc-load-btn').addEventListener('click', async () => {
 document.getElementById('search-btn').addEventListener('click', async () => {
   const pattern = document.getElementById('search-input').value.trim();
   if (!pattern) { showInfo('doc-info', 'Escribe un patrón', 'error'); return; }
-  hideInfo('search-results');
+  hide('search-results');
   try {
     const data = await api('/document/search', { pattern });
     show('search-results');
@@ -95,9 +123,10 @@ document.getElementById('search-btn').addEventListener('click', async () => {
       hide('tree-path-box');
     }
 
+    setViewMode(data.count ? `Búsqueda: "${pattern}"` : '');
     highlightOccurrences(data.original_occurrences);
   } catch (e) {
-    showInfo('doc-info', `Error: ${e.message}`, 'error');
+    showInfo('doc-info', `Error: ${friendlyError(e.message)}`, 'error');
   }
 });
 
@@ -108,13 +137,24 @@ function renderText(text) {
   el.textContent = text || '(sin documento)';
 }
 
+let occMarks = [];
+let occIndex = -1;
+
 function highlightOccurrences(positions) {
   const el = document.getElementById('text-display');
+  const nav = document.getElementById('occ-nav');
+  occMarks = [];
+  occIndex = -1;
+
+  // Re-render plain text first so a search with 0 results clears old highlights.
+  renderText(window._docText || '');
   const text = el.textContent;
-  if (!text || !positions.length) return;
 
   const pattern = document.getElementById('search-input').value.trim().toLowerCase();
-  if (!pattern) return;
+  if (!text || !positions.length || !pattern) {
+    nav.classList.add('hidden');
+    return;
+  }
 
   const parts = [];
   let lastIdx = 0;
@@ -126,7 +166,7 @@ function highlightOccurrences(positions) {
       parts.push(text.slice(lastIdx, pos));
     }
     const end = Math.min(pos + pattern.length, text.length);
-    parts.push(`<mark>${text.slice(pos, end)}</mark>`);
+    parts.push(`<mark class="occ">${text.slice(pos, end)}</mark>`);
     lastIdx = end;
   }
   if (lastIdx < text.length) {
@@ -134,7 +174,31 @@ function highlightOccurrences(positions) {
   }
 
   el.innerHTML = parts.join('');
+
+  occMarks = Array.from(el.querySelectorAll('mark.occ'));
+  if (occMarks.length) {
+    nav.classList.remove('hidden');
+    gotoOcc(0);
+  } else {
+    nav.classList.add('hidden');
+  }
 }
+
+function gotoOcc(i) {
+  if (!occMarks.length) return;
+  occIndex = (i + occMarks.length) % occMarks.length;
+  occMarks.forEach(m => m.classList.remove('active'));
+  const mark = occMarks[occIndex];
+  mark.classList.add('active');
+  mark.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  text('occ-position', `${occIndex + 1} / ${occMarks.length}`);
+}
+
+document.getElementById('occ-prev').addEventListener('click', () => gotoOcc(occIndex - 1));
+document.getElementById('occ-next').addEventListener('click', () => gotoOcc(occIndex + 1));
+document.getElementById('search-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('search-btn').click();
+});
 
 // ── Corpus upload / build ────────────────────────────────────────────────────
 
@@ -148,7 +212,7 @@ document.getElementById('corpus-upload-btn').addEventListener('click', async () 
     const data = await api('/corpus/upload', fd);
     showInfo('corpus-info', `${data.saved.length} archivo(s) guardado(s) (${data.total_chars} caracteres)`, 'success');
   } catch (e) {
-    showInfo('corpus-info', `Error: ${e.message}`, 'error');
+    showInfo('corpus-info', `Error: ${friendlyError(e.message)}`, 'error');
   }
 });
 
@@ -163,7 +227,7 @@ document.getElementById('corpus-build-btn').addEventListener('click', async () =
     text('corpus-chars-label', `Caracteres: ${data.total_chars.toLocaleString()}`);
     text('corpus-build-time-label', `Construcción: ${data.build_time_ms.toFixed(2)} ms`);
   } catch (e) {
-    showInfo('corpus-info', `Error: ${e.message}`, 'error');
+    showInfo('corpus-info', `Error: ${friendlyError(e.message)}`, 'error');
   }
 });
 
@@ -190,19 +254,27 @@ document.getElementById('detect-btn').addEventListener('click', async () => {
 
     renderPlagiarismSpans(data.spans);
   } catch (e) {
-    showInfo('corpus-info', `Error: ${e.message}`, 'error');
+    showInfo('corpus-info', `Error: ${friendlyError(e.message)}`, 'error');
   }
 });
 
 function renderPlagiarismSpans(spans) {
-  const el = document.getElementById('detect-spans');
+  const el = document.getElementById('text-display');
   const text = window._docText || '';
-  if (!text) { el.textContent = '(sin documento)'; return; }
+  // Plagiarism takes over the shared text panel: clear any Ctrl+F nav.
+  document.getElementById('occ-nav').classList.add('hidden');
+  occMarks = [];
+  occIndex = -1;
+
+  if (!text) { setViewMode(''); el.textContent = '(sin documento)'; return; }
 
   if (!spans.length) {
-    el.innerHTML = '<em>No se detectaron coincidencias significativas.</em>';
+    setViewMode('Plagio: sin coincidencias');
+    el.textContent = text;
     return;
   }
+
+  setViewMode('Resaltando coincidencias con el corpus');
 
   const sorted = [...spans].sort((a, b) => a.original_start - b.original_start);
   const parts = [];
@@ -222,6 +294,28 @@ function renderPlagiarismSpans(spans) {
 
 // ── Benchmark ─────────────────────────────────────────────────────────────────
 
+document.getElementById('benchmark-upload-btn').addEventListener('click', async () => {
+  const input = document.getElementById('benchmark-file-input');
+  if (!input.files.length) {
+    showInfo('benchmark-upload-info', 'Selecciona al menos un archivo', 'error');
+    return;
+  }
+  hideInfo('benchmark-upload-info');
+  const fd = new FormData();
+  for (const f of input.files) fd.append('files', f);
+  try {
+    const data = await api('/benchmark/upload', fd);
+    const statsEl = document.getElementById('benchmark-upload-stats');
+    statsEl.innerHTML = data.saved.map(s =>
+      `<div class="stat-row"><strong>${s.filename}</strong> — ${s.char_count.toLocaleString()} caracteres · ${s.word_count.toLocaleString()} palabras</div>`
+    ).join('');
+    show('benchmark-upload-stats');
+    showInfo('benchmark-upload-info', `${data.saved.length} archivo(s) listos para benchmark`, 'success');
+  } catch (e) {
+    showInfo('benchmark-upload-info', `Error: ${friendlyError(e.message)}`, 'error');
+  }
+});
+
 document.getElementById('benchmark-btn').addEventListener('click', async () => {
   const pattern = document.getElementById('benchmark-pattern').value || 'the';
   hide('benchmark-results');
@@ -234,12 +328,16 @@ document.getElementById('benchmark-btn').addEventListener('click', async () => {
       const speedup = r.naive_search_ms > 0
         ? (r.naive_search_ms / r.suffix_tree_search_ms).toFixed(1) + 'x'
         : '—';
-      const sizeLabel = r.size >= 1_000_000
-        ? (r.size / 1_000_000).toFixed(1) + 'M'
-        : (r.size / 1_000).toFixed(0) + 'K';
+      const charsLabel = r.size >= 1_000_000
+        ? (r.size / 1_000_000).toFixed(2) + 'M'
+        : (r.size / 1_000).toFixed(1) + 'K';
+      const wordsLabel = r.word_count >= 1_000
+        ? (r.word_count / 1_000).toFixed(1) + 'K'
+        : r.word_count;
       return `<tr>
-        <td>${sizeLabel}</td>
         <td>${r.file}</td>
+        <td>${charsLabel}</td>
+        <td>${wordsLabel}</td>
         <td>${r.suffix_tree_build_ms.toFixed(2)}</td>
         <td>${r.suffix_tree_search_ms.toFixed(4)}</td>
         <td>${r.naive_search_ms.toFixed(2)}</td>
@@ -251,44 +349,96 @@ document.getElementById('benchmark-btn').addEventListener('click', async () => {
     renderBenchmarkChart(data.results);
   } catch (e) {
     document.getElementById('benchmark-results').innerHTML =
-      `<div class="info-box error">Error: ${e.message}</div>`;
+      `<div class="info-box error">Error: ${friendlyError(e.message)}</div>`;
     show('benchmark-results');
   }
 });
 
-function renderBenchmarkChart(results) {
-  const container = document.getElementById('benchmark-chart');
-  const maxVal = Math.max(...results.map(r => Math.max(r.suffix_tree_build_ms, r.suffix_tree_search_ms * 100, r.naive_search_ms)));
+const _charts = { build: null, search: null };
 
-  container.innerHTML = `
-    <div class="chart-bars">
-      ${results.map(r => {
-        const sizeLabel = r.size >= 1_000_000
-          ? (r.size / 1_000_000).toFixed(1) + 'M'
-          : (r.size / 1_000).toFixed(0) + 'K';
-        const buildH = (r.suffix_tree_build_ms / maxVal * 180);
-        const searchH = Math.max(4, (r.suffix_tree_search_ms * 100 / maxVal * 180));
-        const naiveH = (r.naive_search_ms / maxVal * 180);
-        return `<div class="chart-group">
-          <div class="bars">
-            <div class="chart-bar build" style="height:${buildH}px" title="Build: ${r.suffix_tree_build_ms.toFixed(2)}ms">
-              <span class="bar-label">${r.suffix_tree_build_ms.toFixed(1)}</span>
-            </div>
-            <div class="chart-bar search" style="height:${searchH}px" title="Search ST: ${r.suffix_tree_search_ms.toFixed(4)}ms">
-              <span class="bar-label">${r.suffix_tree_search_ms.toFixed(3)}</span>
-            </div>
-            <div class="chart-bar naive" style="height:${naiveH}px" title="Naive: ${r.naive_search_ms.toFixed(2)}ms">
-              <span class="bar-label">${r.naive_search_ms.toFixed(1)}</span>
-            </div>
-          </div>
-          <div class="x-label">${sizeLabel}</div>
-        </div>`;
-      }).join('')}
-    </div>
-    <div class="chart-legend">
-      <span class="legend-build">Construcción</span>
-      <span class="legend-search">Búsqueda ST</span>
-      <span class="legend-naive">Búsqueda Naive</span>
-    </div>
-  `;
+function makeChartOptions(title, tooltipDecimals) {
+  return {
+    indexAxis: 'y',
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top',
+        labels: {
+          font: { family: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', size: 12 },
+          color: '#444',
+          boxWidth: 12,
+          borderRadius: 3,
+        },
+      },
+      tooltip: {
+        callbacks: {
+          label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.x.toFixed(tooltipDecimals)} ms`,
+        },
+      },
+    },
+    scales: {
+      x: {
+        grid: { color: 'rgba(0,0,0,0.06)' },
+        ticks: { color: '#666', font: { size: 11 }, callback: v => v + ' ms' },
+        title: { display: true, text: title, color: '#888', font: { size: 11 } },
+      },
+      y: {
+        grid: { display: false },
+        ticks: { color: '#333', font: { size: 12 } },
+      },
+    },
+  };
+}
+
+function renderBenchmarkChart(results) {
+  const labels = results.map(r => r.file.replace(/\.txt$/, ''));
+  const h = Math.max(220, results.length * 52) + 'px';
+
+  // Destroy previous instances
+  for (const key of Object.keys(_charts)) {
+    if (_charts[key]) { _charts[key].destroy(); _charts[key] = null; }
+  }
+
+  // Chart 1: Construction time
+  const buildCanvas = document.getElementById('chart-build');
+  buildCanvas.parentElement.style.height = h;
+  _charts.build = new Chart(buildCanvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Construcción ST (ms)',
+        data: results.map(r => r.suffix_tree_build_ms),
+        backgroundColor: 'rgba(52, 85, 126, 0.82)',
+        borderRadius: 4,
+      }],
+    },
+    options: makeChartOptions('Tiempo de construcción (ms)', 2),
+  });
+
+  // Chart 2: ST search vs Naive search
+  const searchCanvas = document.getElementById('chart-search');
+  searchCanvas.parentElement.style.height = h;
+  _charts.search = new Chart(searchCanvas, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Búsqueda ST (ms)',
+          data: results.map(r => r.suffix_tree_search_ms),
+          backgroundColor: 'rgba(46, 107, 62, 0.82)',
+          borderRadius: 4,
+        },
+        {
+          label: 'Búsqueda Naive (ms)',
+          data: results.map(r => r.naive_search_ms),
+          backgroundColor: 'rgba(154, 42, 42, 0.82)',
+          borderRadius: 4,
+        },
+      ],
+    },
+    options: makeChartOptions('Tiempo de búsqueda (ms)', 4),
+  });
 }
